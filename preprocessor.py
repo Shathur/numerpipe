@@ -29,32 +29,39 @@ class Preprocessor():
         validation_example_preds=False,
         features=False,
         meta_model=False,
-        integers=False,
+        live_benchmark_models=False,
+        validation_benchmark_models=False,
+        train_benchmark_models=False,
     ):
-        if integers:
-            int_suffix='_int8'
-        else:
-            int_suffix=''
+
+        """
+        Supports 4.2 data. For more info for the various downloads here visit
+        https://numer.ai/data
+        """
+        int_suffix='_int8'
         if train:
-            self.napi.download_dataset(f'v4.1/train{int_suffix}.parquet',os.path.join(self.datapath,f'train{int_suffix}.parquet')) 
+            self.napi.download_dataset(f'v4.2/train{int_suffix}.parquet',os.path.join(self.datapath,f'train{int_suffix}.parquet')) 
         if validation:
-            self.napi.download_dataset(f'v4.1/validation{int_suffix}.parquet',os.path.join(self.datapath,f'validation{int_suffix}.parquet')) 
+            self.napi.download_dataset(f'v4.2/validation{int_suffix}.parquet',os.path.join(self.datapath,f'validation{int_suffix}.parquet')) 
         if live:
-            self.napi.download_dataset(f'v4.1/live{int_suffix}.parquet',os.path.join(self.datapath,f'live{int_suffix}.parquet')) 
+            self.napi.download_dataset(f'v4.2/live{int_suffix}.parquet',os.path.join(self.datapath,f'live{int_suffix}.parquet')) 
         if live_example_preds:
-            self.napi.download_dataset('v4.1/live_example_preds.parquet',os.path.join(self.datapath,'live_example_preds.parquet')) 
+            self.napi.download_dataset('v4.2/live_example_preds.parquet',os.path.join(self.datapath,'live_example_preds.parquet')) 
         if validation_example_preds:
-            self.napi.download_dataset('v4.1/validation_example_preds.parquet',os.path.join(self.datapath,'validation_example_preds.parquet')) 
+            self.napi.download_dataset('v4.2/validation_example_preds.parquet',os.path.join(self.datapath,'validation_example_preds.parquet')) 
         if features:
-            self.napi.download_dataset('v4.1/features.json',os.path.join(self.datapath,'features.json')) 
+            self.napi.download_dataset('v4.2/features.json',os.path.join(self.datapath,'features.json')) 
         if meta_model:
-            self.napi.download_dataset('v4.1/meta_model.parquet',os.path.join(self.datapath,'meta_model.parquet')) 
+            self.napi.download_dataset('v4.2/meta_model.parquet',os.path.join(self.datapath,'meta_model.parquet')) 
+        if live_benchmark_models:
+            napi.download_dataset("v4.2/live_benchmark_models.parquet", "live_benchmark_models.parquet")
+        if validation_benchmark_models:
+            napi.download_dataset("v4.2/validation_benchmark_models.parquet", "validation_benchmark_models.parquet")
+        if train_benchmark_models:
+            napi.download_dataset("v4.2/train_benchmark_models.parquet", "train_benchmark_models.parquet")
 
     def get_data(self,train=False,validation=False,live=False,merge=False,integers=False):
-        if integers:
-            int_suffix='_int8'
-        else:
-            int_suffix=''
+        int_suffix='_int8'
         if ((os.path.exists(os.path.join(self.datapath,f'train{int_suffix}.parquet'))) and train):
             self.train_df = pd.read_parquet(os.path.join(self.datapath,f'train{int_suffix}.parquet'))
         if ((os.path.exists(os.path.join(self.datapath,f'validation{int_suffix}.parquet'))) and validation):
@@ -67,27 +74,37 @@ class Preprocessor():
     def get_features(self,feature_group):
         """
         features_json contains: 
-            feature_stats
+            feature_stats : every single feature with the following stats
+                legacy_uniqueness
+                spearman_corr_w_target_nomi_20_mean
+                spearman_corr_w_target_nomi_20_sharpe
+                spearman_corr_w_target_nomi_20_reversals
+                spearman_corr_w_target_nomi_20_autocorr
+                spearman_corr_w_target_nomi_20_arl 
             feature_sets
+                small
+                medium
+                all
+                v2_equivalent_features
+                v3_equivalent_features
+                fncv3_features
+                intelligence, charisma, stregth, dexterity, constitution, wisdom, agility, serenity
+                sunshine
+                rain
             targets
-        feature_group is one of the feature_sets : 
-            small
-            medium
-            full
-            v2_equivalent_features
-            v3_equivalent_features
-            fncv3_features
+                now scoring on target_cyrus_v4_20
         """
-        possible_feature_list = ["small","medium","full","v2_equivalent_features","v3_equivalent_features","fncv3_features"]
+        possible_feature_list = [
+            "small","medium","all","v2_equivalent_features","v3_equivalent_features","fncv3_features",
+            "intelligence", "charisma", "strength", "dexterity", "constitution", "wisdom", "agility",
+            "serenity", "sunshine", "rain",
+        ]
         assert os.path.exists(f'{self.datapath}/features.json'), 'features_json does not exist, need to download it first'
         assert feature_group in possible_feature_list, f"unavailable feature_set name -- use one of the following {possible_feature_list}"
         
-        if feature_group == "full":
-            self.feature_cols = [f for f in self.train_df.columns.tolist() if "feature" in f]
-        else:
-            f = open(f'{self.datapath}/features.json')
-            features_json = json.load(f)
-            self.feature_cols = features_json['feature_sets'][feature_group]
+        f = open(f'{self.datapath}/features.json')
+        features_json = json.load(f)
+        self.feature_cols = features_json['feature_sets'][feature_group]
 
     def per_era_correlations(self,df,features,era_col,target_col):
         """Get the correlation of each era with the designated target"""
