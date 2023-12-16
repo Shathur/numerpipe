@@ -1,7 +1,7 @@
 import pandas as pd
 
-from Numerai.predictions import predict_in_era_batch
-from Numerai.utils import get_era_idx, spearman
+from numerpipe.predictions import predict_in_era_batch
+from numerpipe.utils import get_era_idx, spearman
 
 class EraBooster:
     """

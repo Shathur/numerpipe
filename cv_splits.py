@@ -4,11 +4,11 @@ from sklearn.model_selection._split import _BaseKFold, indexable, _num_samples
 
 from sklearn.metrics import log_loss, accuracy_score
 
-from Numerai import utils
-from Numerai import models
-from Numerai.predictions import predict_in_era_batch
+from numerpipe import utils
+from numerpipe import models
+from numerpipe.predictions import predict_in_era_batch
 
-from Numerai.NewData.utils_new import *
+from numerpipe.NewData.utils_new import *
 
 
 class Random_Splits(_BaseKFold):

@@ -24,8 +24,8 @@ from xgboost import XGBRegressor
 
 import lightgbm as lgb
 
-from Numerai.feature_neutralization import *
-from Numerai.NewData.utils_new import *
+from numerpipe.feature_neutralization import *
+from numerpipe.NewData.utils_new import *
 
 PRED_NAME_NEUT_PER_ERA = f'prediction_neutralized_per_era'
 
@@ -81,7 +81,7 @@ def load_data():
     # The training data is used to train your model how to predict the targets.
     training_data = pd.read_csv(
         "https://numerai-public-datasets.s3-us-west-2.amazonaws.com/latest_numerai_training_data.csv.xz")
-    # The tournament data is the data that Numerai uses to evaluate your model.
+    # The tournament data is the data that numerpipe uses to evaluate your model.
     tournament_data = pd.read_csv(
         "https://numerai-public-datasets.s3-us-west-2.amazonaws.com/latest_numerai_tournament_data.csv.xz")
 
