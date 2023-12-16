@@ -167,9 +167,18 @@ class Preprocessor():
         train_eras = unique_eras[erasplit[0]:erasplit[1]]
         test_eras = unique_eras[erasplit[2]:erasplit[3]]
         validation_eras = unique_eras[erasplit[4]:erasplit[5]]
-        new_train_df[new_train_df["era"].isin(train_eras)].to_parquet(os.path.join(self.datapath,save_filenames[0]))
-        new_train_df[new_train_df["era"].isin(test_eras)].to_parquet(os.path.join(self.datapath,save_filenames[1]))
-        new_train_df[new_train_df["era"].isin(validation_eras)].to_parquet(self.datapath,save_filenames[2])
+        new_train_df[new_train_df["era"].isin(train_eras)].to_parquet(
+            os.path.join(self.datapath,save_filenames[0]),
+            engine="pyarrow",
+        )
+        new_train_df[new_train_df["era"].isin(test_eras)].to_parquet(
+            os.path.join(self.datapath,save_filenames[1]),
+            engine="pyarrow",
+        )
+        new_train_df[new_train_df["era"].isin(validation_eras)].to_parquet(
+            os.path.join(self.datapath,save_filenames[2]),
+            engine="pyarrow",
+        )
 
     def train(self,type_of_model,model_params,fit_params,save_to_drive,save_folder,calculate_metrics,plot_metrics,iteration=0):
         """
