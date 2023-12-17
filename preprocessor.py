@@ -60,7 +60,7 @@ class Preprocessor():
         if train_benchmark_models:
             napi.download_dataset("v4.2/train_benchmark_models.parquet", "train_benchmark_models.parquet")
 
-    def get_data(self,train=False,validation=False,live=False,merge=False,integers=False):
+    def get_data(self,train=False,validation=False,live=False,merge=False):
         int_suffix='_int8'
         if ((os.path.exists(os.path.join(self.datapath,f'train{int_suffix}.parquet'))) and train):
             self.train_df = pd.read_parquet(os.path.join(self.datapath,f'train{int_suffix}.parquet'))
