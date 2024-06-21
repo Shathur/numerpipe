@@ -77,16 +77,16 @@ class Preprocessor:
                 os.path.join(self.datapath, "meta_model.parquet"),
             )
         if live_benchmark_models:
-            napi.download_dataset(
+            self.napi.download_dataset(
                 "v4.3/live_benchmark_models.parquet", "live_benchmark_models.parquet"
             )
         if validation_benchmark_models:
-            napi.download_dataset(
+            self.napi.download_dataset(
                 "v4.3/validation_benchmark_models.parquet",
                 "validation_benchmark_models.parquet",
             )
         if train_benchmark_models:
-            napi.download_dataset(
+            self.napi.download_dataset(
                 "v4.3/train_benchmark_models.parquet", "train_benchmark_models.parquet"
             )
 
