@@ -41,20 +41,19 @@ class Preprocessor:
         Updated for 5.0 data. For more info for the various downloads here visit
         https://numer.ai/data
         """
-        int_suffix = "_int8"
         if train:
             self.napi.download_dataset(
-                f"v5.0/train{int_suffix}.parquet",
+                "v5.0/train.parquet",
                 os.path.join(self.datapath, f"train{int_suffix}.parquet"),
             )
         if validation:
             self.napi.download_dataset(
-                f"v5.0/validation{int_suffix}.parquet",
+                "v5.0/validation.parquet",
                 os.path.join(self.datapath, f"validation{int_suffix}.parquet"),
             )
         if live:
             self.napi.download_dataset(
-                f"v5.0/live{int_suffix}.parquet",
+                "v5.0/live.parquet",
                 os.path.join(self.datapath, f"live{int_suffix}.parquet"),
             )
         if validation_example_preds:
