@@ -44,17 +44,17 @@ class Preprocessor:
         if train:
             self.napi.download_dataset(
                 "v5.0/train.parquet",
-                os.path.join(self.datapath, f"train{int_suffix}.parquet"),
+                os.path.join(self.datapath, f"train.parquet"),
             )
         if validation:
             self.napi.download_dataset(
                 "v5.0/validation.parquet",
-                os.path.join(self.datapath, f"validation{int_suffix}.parquet"),
+                os.path.join(self.datapath, f"validation.parquet"),
             )
         if live:
             self.napi.download_dataset(
                 "v5.0/live.parquet",
-                os.path.join(self.datapath, f"live{int_suffix}.parquet"),
+                os.path.join(self.datapath, f"live.parquet"),
             )
         if validation_example_preds:
             self.napi.download_dataset(
@@ -90,27 +90,18 @@ class Preprocessor:
             )
 
     def get_data(self, train=False, validation=False, live=False, merge=False):
-        int_suffix = "_int8"
-        if (
-            os.path.exists(os.path.join(self.datapath, f"train{int_suffix}.parquet"))
-        ) and train:
+        if (os.path.exists(os.path.join(self.datapath, f"train.parquet"))) and train:
             self.train_df = pd.read_parquet(
-                os.path.join(self.datapath, f"train{int_suffix}.parquet")
+                os.path.join(self.datapath, f"train.parquet")
             )
         if (
-            os.path.exists(
-                os.path.join(self.datapath, f"validation{int_suffix}.parquet")
-            )
+            os.path.exists(os.path.join(self.datapath, f"validation.parquet"))
         ) and validation:
             self.validation_df = pd.read_parquet(
-                os.path.join(self.datapath, f"validation{int_suffix}.parquet")
+                os.path.join(self.datapath, f"validation.parquet")
             )
-        if (
-            os.path.exists(os.path.join(self.datapath, f"live{int_suffix}.parquet"))
-        ) and live:
-            self.live_df = pd.read_parquet(
-                os.path.join(self.datapath, f"live{int_suffix}.parquet")
-            )
+        if (os.path.exists(os.path.join(self.datapath, f"live.parquet"))) and live:
+            self.live_df = pd.read_parquet(os.path.join(self.datapath, f"live.parquet"))
         if merge:
             self.train_df = pd.concat([self.train_df, self.validation_df])
 
@@ -208,7 +199,7 @@ class Preprocessor:
 
     def save_custom_era_split(
         self,
-        filename="full_data_int8.parquet",
+        filename="full_data.parquet",
         erasplit=[0, -500, -300, -1],
         save_filenames=[
             "new_train.parquet",
