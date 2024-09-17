@@ -9,8 +9,9 @@ from utils import get_era_idx
 from feature_neutralization import neutralize, neutralize_short
 from setup_env_variables import setup
 
-class PostProcessor():
-    def __init__(self,preprosessor:Preprocessor,models_path:str,prefix:str):
+
+class PostProcessor:
+    def __init__(self, preprosessor: Preprocessor, models_path: str, prefix: str):
         self.preprocessor = preprosessor
         self.models_path = models_path
         self.prefix = prefix
@@ -23,8 +24,8 @@ class PostProcessor():
         columns,
         proportion=1,
         normalize=True,
-        era_col='era',
-        extra_neutralizers=[]
+        era_col="era",
+        extra_neutralizers=[],
     ):
         """
         Calls either the neutralize or the neutralize_short from utils
@@ -42,24 +43,24 @@ class PostProcessor():
             proportion=proportion,
             normalize=normalize,
             era_col=era_col,
-            extra_neutralizers=extra_neutralizers
-        ) 
+            extra_neutralizers=extra_neutralizers,
+        )
 
     def get_keys(self):
         """get keys from global variables"""
         # setup env variables
         setup()
         # load keys from global environment
-        public_id = os.getenv('PUBLIC_ID')
-        secret_key = os.getenv('SECRET_KEY')
+        public_id = os.getenv("PUBLIC_ID")
+        secret_key = os.getenv("SECRET_KEY")
         return public_id, secret_key
 
     def get_napi(self):
         """get numerapi instance with specific keys"""
         public_id, secret_key = self.get_keys()
         return numerapi.NumerAPI(public_id=public_id, secret_key=secret_key)
-    
-    def get_predictions_per_era(self,df,model_path,model_type):
+
+    def get_predictions_per_era(self, df, model_path, model_type):
         """Return predictions per era for our df"""
         return get_predictions_per_era(
             df=df[self.preprocessor.feature_cols],
@@ -69,19 +70,23 @@ class PostProcessor():
             era_idx=get_era_idx(df),
             model_type=model_type,
             rank_average=False,
-            verbose=False
-        ) 
+            verbose=False,
+        )
 
-    def add_predictions_per_era(self,df:pd.DataFrame(),model_name:str,model_type:str):
+    def add_predictions_per_era(
+        self, df: pd.DataFrame(), model_name: str, model_type: str
+    ):
         """predict and add prediction to dataframe"""
-        predictions = self.get_predictions_per_era(df,os.path.join(self.models_path,model_name),model_type)
+        predictions = self.get_predictions_per_era(
+            df, os.path.join(self.models_path, model_name), model_type
+        )
         self.predictions_gathered_df[model_name] = predictions
 
     def get_id_column(self, df):
         """return index id as a column"""
-        if df.index.name == 'id':
+        if df.index.name == "id":
             # id_series = df.reset_index()['id']
-            id_series = df.index # much smaller memory blueprint
+            id_series = df.index  # much smaller memory blueprint
         else:
             raise ValueError("df should be a DataFrame with an index named 'id'")
         return id_series
@@ -89,44 +94,56 @@ class PostProcessor():
     def save_predictions(self, path):
         """save predictions df"""
         if os.path.exists(path):
-            self.predictions_gathered_df.to_csv(os.path.join(path,'predictions_gathered_df.csv'))
+            self.predictions_gathered_df.to_csv(
+                os.path.join(path, "predictions_gathered_df.csv")
+            )
         else:
             raise FileNotFoundError(f"{path} is not a valid path")
 
     def submit(self, df, filename, submit_type, keep_diagnostics=True):
         """
         Submits either live either diagnostics
+        The passed df is used only to decide on which indexes to keep.
+        The predictions that are sent for validation come from
+        self.predictions_gathered_df. PostProcessor.validation_df instances
+        are used just for indices
         If diagnostics are submitted we assume that we have trained
         on eras before the tournament provided validation_df, and the df
         passed is the validation_df
         """
         # get_keys
-        public_key,secret_key = self.get_keys()
+        public_key, secret_key = self.get_keys()
         # keep our model names as list to iterate on
         model_names = self.predictions_gathered_df.columns.tolist()
         # keep id as a column
         predictions_df = self.get_id_column(df).to_frame()
         # need to also reset the index
         predictions_df = predictions_df.reset_index(drop=True)
-        if submit_type == 'prediction':
+        if submit_type == "prediction":
             for name in tqdm(model_names):
-                predictions_df['prediction'] = self.predictions_gathered_df[name]
+                predictions_df["prediction"] = self.predictions_gathered_df[name]
                 model_id = self.napi.get_models()[name]
                 # Upload predictions
                 predictions_df.to_csv(filename, index=False)
-                submission_id = self.napi.upload_predictions(file_path=filename, model_id=model_id)
+                submission_id = self.napi.upload_predictions(
+                    file_path=filename, model_id=model_id
+                )
                 if not keep_diagnostics:
-                    filename_path = Path(filename) 
+                    filename_path = Path(filename)
                     filename_path.unlink()
-        elif submit_type == 'diagnostics':
+        elif submit_type == "diagnostics":
             for name in tqdm(model_names):
-                predictions_df['prediction'] = self.predictions_gathered_df[name]
+                predictions_df["prediction"] = self.predictions_gathered_df[name]
                 model_id = self.napi.get_models()[name]
                 # Upload predictions
                 predictions_df.to_csv(filename, index=False)
-                submission_id = self.napi.upload_diagnostics(file_path=filename, model_id=model_id)
+                submission_id = self.napi.upload_diagnostics(
+                    file_path=filename, model_id=model_id
+                )
                 if not keep_diagnostics:
-                    filename_path = Path(filename) 
+                    filename_path = Path(filename)
                     filename_path.unlink()
         else:
-            raise ValueError("submit_type needs to be either 'prediction' or 'diagnostics'")
+            raise ValueError(
+                "submit_type needs to be either 'prediction' or 'diagnostics'"
+            )
