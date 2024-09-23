@@ -5,33 +5,32 @@ import tensorflow as tf
 import joblib
 from tqdm.notebook import tqdm
 
-TARGET_NAME = f'target'
-PREDICTION_NAME = f'prediction'
-PREDICTION_NAME_NEUTRALIZED = f'prediction_neutralized'
+TARGET_NAME = f"target"
+PREDICTION_NAME = f"prediction"
+PREDICTION_NAME_NEUTRALIZED = f"prediction_neutralized"
 
 
 def neutralize_short(df, prediction_name=None, by=None, proportion=1.0):
     if by is None:
-        by = [x for x in df.columns if x.startswith('feature')]
+        by = [x for x in df.columns if x.startswith("feature")]
 
     scores = df[prediction_name].copy()
     # if you dont take .copy() it changes the original df
     exposures = df[by].values
 
     # constant column to make sure the series is completely neutral to exposures
-    exposures = np.hstack((exposures, np.array([np.mean(scores)] * len(exposures)).reshape(-1, 1)))
+    exposures = np.hstack(
+        (exposures, np.array([np.mean(scores)] * len(exposures)).reshape(-1, 1))
+    )
 
     scores -= proportion * (exposures @ (np.linalg.pinv(exposures) @ scores.values))
     return scores / scores.std()
 
 
 # to neutralize a column in a df by many other columns on a per-era basis
-def neutralize(df,
-               columns,
-               extra_neutralizers=None,
-               proportion=1.0,
-               normalize=True,
-               era_col="era"):
+def neutralize(
+    df, columns, extra_neutralizers=None, proportion=1.0, normalize=True, era_col="era"
+):
     # need to do this for lint to be happy bc [] is a "dangerous argument"
     if extra_neutralizers is None:
         extra_neutralizers = []
@@ -44,7 +43,7 @@ def neutralize(df,
         if normalize:
             scores2 = []
             for x in scores.T:
-                x = (pd.Series(x).rank(method="first").values - .5) / len(x)
+                x = (pd.Series(x).rank(method="first").values - 0.5) / len(x)
                 scores2.append(x)
             scores = np.array(scores2).T
             extra = df_era[extra_neutralizers].values
@@ -53,15 +52,14 @@ def neutralize(df,
             exposures = df_era[extra_neutralizers].values
 
         scores -= proportion * exposures.dot(
-            np.linalg.pinv(exposures.astype(np.float32)).dot(scores.astype(np.float32)))
+            np.linalg.pinv(exposures.astype(np.float32)).dot(scores.astype(np.float32))
+        )
 
         scores /= scores.std(ddof=0)
 
         computed.append(scores)
 
-    return pd.DataFrame(np.concatenate(computed),
-                        columns=columns,
-                        index=df.index)
+    return pd.DataFrame(np.concatenate(computed), columns=columns, index=df.index)
 
 
 # to neutralize any series by any other series
@@ -71,11 +69,12 @@ def neutralize_series(series, by, proportion=1.0):
 
     # this line makes series neutral to a constant column so that it's centered and for sure gets corr 0 with exposures
     exposures = np.hstack(
-        (exposures,
-         np.array([np.mean(series)] * len(exposures)).reshape(-1, 1)))
+        (exposures, np.array([np.mean(series)] * len(exposures)).reshape(-1, 1))
+    )
 
-    correction = proportion * (exposures.dot(
-        np.linalg.lstsq(exposures, scores, rcond=None)[0]))
+    correction = proportion * (
+        exposures.dot(np.linalg.lstsq(exposures, scores, rcond=None)[0])
+    )
     corrected_scores = scores - correction
     neutralized = pd.Series(corrected_scores.ravel(), index=series.index)
     return neutralized
@@ -97,8 +96,10 @@ def exposures(x, y):
 def train_loop_body(model, feats, pred, target_exps):
     with tf.GradientTape() as tape:
         exps = exposures(feats, pred[:, None] - model(feats, training=True))
-        loss = tf.reduce_sum(tf.nn.relu(tf.nn.relu(exps) - tf.nn.relu(target_exps)) +
-                             tf.nn.relu(tf.nn.relu(-exps) - tf.nn.relu(-target_exps)))
+        loss = tf.reduce_sum(
+            tf.nn.relu(tf.nn.relu(exps) - tf.nn.relu(target_exps))
+            + tf.nn.relu(tf.nn.relu(-exps) - tf.nn.relu(-target_exps))
+        )
     return loss, tape.gradient(loss, model.trainable_variables)
 
 
@@ -111,14 +112,16 @@ def train_loop(model, optimizer, feats, pred, target_exps, era):
             break
         if i % 10000 == 0:
             # tqdm.write(f'era: {era[3:]} loss: {loss:0.7f}', end='\r')
-            tqdm.write(f'era: {int(era)} loss: {loss:0.7f}', end='\r')
+            tqdm.write(f"era: {int(era)} loss: {loss:0.7f}", end="\r")
 
 
 def reduce_exposure(prediction, features, max_exp, era, weights=None):
-    model = tf.keras.models.Sequential([
-        tf.keras.layers.Input(features.shape[1]), # 310
-        tf.keras.experimental.LinearModel(use_bias=False),
-    ])
+    model = tf.keras.models.Sequential(
+        [
+            tf.keras.layers.Input(features.shape[1]),  # 310
+            tf.keras.experimental.LinearModel(use_bias=False),
+        ]
+    )
     feats = tf.convert_to_tensor(features - 0.5, dtype=tf.float32)
     pred = tf.convert_to_tensor(prediction, dtype=tf.float32)
     if weights is None:
@@ -131,12 +134,16 @@ def reduce_exposure(prediction, features, max_exp, era, weights=None):
     return pred[:, None] - model(feats), model.get_weights()
 
 
-def reduce_all_exposures(df, column=["prediction"], neutralizers=None,
-                         lm_cache_file=None,
-                         normalize=True,
-                         gaussianize=True,
-                         era_col="era",
-                         max_exp=0.1):  ###<-----SELECT YOUR MAXIMUM FEATURE EXPOSURE HERE###
+def reduce_all_exposures(
+    df,
+    column=["prediction"],
+    neutralizers=None,
+    lm_cache_file=None,
+    normalize=True,
+    gaussianize=True,
+    era_col="era",
+    max_exp=0.1,
+):  ###<-----SELECT YOUR MAXIMUM FEATURE EXPOSURE HERE###
     if neutralizers is None:
         neutralizers = [x for x in df.columns if x.startswith("feature")]
     neutralized = []
@@ -147,7 +154,7 @@ def reduce_all_exposures(df, column=["prediction"], neutralizers=None,
     else:
         cache = {}
     for era in tqdm(df[era_col].unique()):
-        tqdm.write(era, end='\r')
+        tqdm.write(era, end="\r")
         df_era = df[df[era_col] == era]
         scores = df_era[column].values
         exposure_values = df_era[neutralizers].values
@@ -155,14 +162,15 @@ def reduce_all_exposures(df, column=["prediction"], neutralizers=None,
         if normalize:
             scores2 = []
             for x in scores.T:
-                x = (scipy.stats.rankdata(x, method='ordinal') - .5) / len(x)
+                x = (scipy.stats.rankdata(x, method="ordinal") - 0.5) / len(x)
                 if gaussianize:
                     x = scipy.stats.norm.ppf(x)
                 scores2.append(x)
             scores = np.array(scores2)[0]
 
-        scores, weights = reduce_exposure(scores, exposure_values,
-                                          max_exp, era, cache.get(era))
+        scores, weights = reduce_exposure(
+            scores, exposure_values, max_exp, era, cache.get(era)
+        )
         if era not in cache and era != "eraX":
             cache[era] = weights
             joblib.dump(cache, lm_cache_file)
@@ -171,30 +179,35 @@ def reduce_all_exposures(df, column=["prediction"], neutralizers=None,
         scores /= tf.reduce_max(scores)
         neutralized.append(scores.numpy())
 
-    predictions = pd.DataFrame(np.concatenate(neutralized),
-                               columns=column, index=df.index)
+    predictions = pd.DataFrame(
+        np.concatenate(neutralized), columns=column, index=df.index
+    )
     return predictions
 
 
 # Put together the code above into a pipeline
-def neutralization_trimming(tour_df = None, preds=None, lm_cache_file=None, max_exp=None):
+def neutralization_trimming(tour_df=None, preds=None, lm_cache_file=None, max_exp=None):
     tour_df[PREDICTION_NAME] = preds
 
     # save predictions to transfer model either for inference or feature exposure clipping
     predictions_df = tour_df.index.to_frame().reset_index(drop=True)
-    predictions_df['prediction_kazutsugi'] = tour_df[PREDICTION_NAME].reset_index(drop=True)
+    predictions_df["prediction_kazutsugi"] = tour_df[PREDICTION_NAME].reset_index(
+        drop=True
+    )
     predictions_df.to_csv("predictions_saved.csv", index=False)
 
     # Predictions we want to trim
-    predictions_df = pd.read_csv('predictions_saved.csv', index_col=0)
+    predictions_df = pd.read_csv("predictions_saved.csv", index_col=0)
 
     # we merge the tournament data with our predictions so we have already dropped the indexes
     full_df = pd.merge(tour_df, predictions_df, left_index=True, right_index=True)
 
-    full_df.rename(columns={'prediction_kazutsugi': 'prediction'}, inplace=True)
+    full_df.rename(columns={"prediction_kazutsugi": "prediction"}, inplace=True)
 
-    neutralized_predictions_df = reduce_all_exposures(df=full_df, lm_cache_file=lm_cache_file, max_exp=0.10)
+    neutralized_predictions_df = reduce_all_exposures(
+        df=full_df, lm_cache_file=lm_cache_file, max_exp=0.10
+    )
 
-    tour_df[PREDICTION_NAME_NEUTRALIZED] = neutralized_predictions_df['prediction']
+    tour_df[PREDICTION_NAME_NEUTRALIZED] = neutralized_predictions_df["prediction"]
 
     return neutralized_predictions_df[PREDICTION_NAME].values
