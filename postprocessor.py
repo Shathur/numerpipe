@@ -100,7 +100,7 @@ class PostProcessor:
         else:
             raise FileNotFoundError(f"{path} is not a valid path")
 
-    def submit(self, df, filename, submit_type, keep_diagnostics=True):
+    def submit(self, df, submission_name, submit_type, keep_diagnostics=True):
         """
         Submits either live either diagnostics
         The passed df is used only to decide on which indexes to keep.
@@ -124,25 +124,25 @@ class PostProcessor:
                 predictions_df["prediction"] = self.predictions_gathered_df[name]
                 model_id = self.napi.get_models()[name]
                 # Upload predictions
-                predictions_df.to_csv(filename, index=False)
+                predictions_df.to_csv(f"{submission_name}.csv", index=False)
                 submission_id = self.napi.upload_predictions(
-                    file_path=filename, model_id=model_id
+                    file_path=f"{submission_name}.csv", model_id=model_id
                 )
                 if not keep_diagnostics:
-                    filename_path = Path(filename)
-                    filename_path.unlink()
+                    submission_name_path = Path(f"{submission_name}.csv")
+                    submission_name_path.unlink()
         elif submit_type == "diagnostics":
             for name in tqdm(model_names):
                 predictions_df["prediction"] = self.predictions_gathered_df[name]
                 model_id = self.napi.get_models()[name]
                 # Upload predictions
-                predictions_df.to_csv(filename, index=False)
+                predictions_df.to_csv(f"{submission_name}.csv", index=False)
                 submission_id = self.napi.upload_diagnostics(
-                    file_path=filename, model_id=model_id
+                    file_path=f"{submission_name}.csv", model_id=model_id
                 )
                 if not keep_diagnostics:
-                    filename_path = Path(filename)
-                    filename_path.unlink()
+                    submission_name_path = Path(f"{submission_name}.csv")
+                    submission_name_path.unlink()
         else:
             raise ValueError(
                 "submit_type needs to be either 'prediction' or 'diagnostics'"
