@@ -91,7 +91,7 @@ def run_model(
                 )
             else:
                 model.save_model(
-                    Path(Path(save_folder) / "model_{}.".format(cv_count) / model_type)
+                    Path(Path(save_folder) / f"model_{cv_count}.{model_type}")
                 )
         else:
             if model_type == "lgb":
