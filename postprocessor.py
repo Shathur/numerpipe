@@ -110,6 +110,8 @@ class PostProcessor:
         If diagnostics are submitted we assume that we have trained
         on eras before the tournament provided validation_df, and the df
         passed is the validation_df
+        important to note that we have to pass a data file (*.csv) to
+        napi.upload_predictions.
         """
         # get_keys
         public_key, secret_key = self.get_keys()
