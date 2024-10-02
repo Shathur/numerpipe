@@ -240,6 +240,7 @@ class Preprocessor:
         save_folder,
         calculate_metrics,
         plot_metrics,
+        legacy_save=False,
         iteration=0,
     ):
         """
@@ -262,6 +263,7 @@ class Preprocessor:
             fit_params=fit_params,
             save_to_drive=save_to_drive,
             save_folder=save_folder,
+            legacy_save=legacy_save,
             calculate_metrics=calculate_metrics,
             plot_metrics=plot_metrics,
         )
