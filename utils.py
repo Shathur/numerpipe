@@ -1,33 +1,25 @@
 import numpy as np
 import pandas as pd
-
-pd.options.mode.chained_assignment = None
-
 import csv
-import time
 import pickle
 import os
 from tqdm import tqdm
+from datetime import timedelta
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from sklearn.model_selection._split import _BaseKFold, indexable, _num_samples
-from sklearn import model_selection, metrics
 from scipy.stats import spearmanr
 from sklearn.preprocessing import MinMaxScaler
-
-import xgboost as xgb
-from xgboost import XGBRegressor
-
-import lightgbm as lgb
 
 from numerpipe.feature_neutralization import *
 from numerpipe.NewData.utils_new import *
 
-PRED_NAME_NEUT_PER_ERA = f"prediction_neutralized_per_era"
+pd.options.mode.chained_assignment = None
+
+PRED_NAME_NEUT_PER_ERA = "prediction_neutralized_per_era"
 
 
 # Read the csv file into a pandas Dataframe as float16 to save space
@@ -123,6 +115,49 @@ def save_obj(obj, name):
 def load_obj(name):
     with open(name + ".pkl", "rb") as f:
         return pickle.load(f)
+
+def start_end_date(df, date_col="date"):
+    """
+
+    :param date_col: the name of the column that measures time
+    :param df: dataframe that must contain one column named 'date' in the datetime format
+    :return: start date and end date as strings
+    """
+    if df[date_col].dtypes == "datetime64[ns]":
+        start_date = (
+            str(df[date_col].iloc[0].date().month)
+            + "-"
+            + str(df[date_col].iloc[0].date().day)
+            + "-"
+            + str(df[date_col].iloc[0].date().year)
+        )
+        end_date = (
+            str(df[date_col].iloc[-1].date().month)
+            + "-"
+            + str(df[date_col].iloc[-1].date().day)
+            + "-"
+            + str(df[date_col].iloc[-1].date().year)
+        )
+    else:
+        start_date = df[date_col].iloc[0]
+        end_date = df[date_col].iloc[-1]
+
+    return start_date, end_date
+
+
+def weeks_between_dates(d1, d2):
+    """
+
+    :param d1: first date in datetime format
+    :param d2: second date in datetime format
+    :return: weeks in integer format
+    """
+    monday1 = d1 - timedelta(days=d1.weekday())
+    monday2 = d2 - timedelta(days=d2.weekday())
+
+    weeks = (monday2 - monday1).days // 7
+
+    return weeks
 
 
 # convenience method for scoring
