@@ -26,6 +26,7 @@ class Preprocessor:
 
     def download_data(
         self,
+        data_version="quantum",
         train=False,
         validation=False,
         live=False,
@@ -41,52 +42,64 @@ class Preprocessor:
         Updated for 5.0 data. For more info for the various downloads here visit
         https://numer.ai/data
         """
+        dv_list = ["atlas", "5.0", "faith", "5.1", "faith2", "5.2", "quantum", "5.3"]
+        if data_version == "atlas" or data_version == "5.0":
+            dv = "5.0"
+        elif data_version == "faith" or data_version == "5.1":
+            dv = "5.1"
+        elif data_version == "faith2" or data_version == "5.2":
+            dv = "5.2"
+        elif data_version == "quantum" or data_version == "5.3":
+            dv = "5.3"
+        if data_version not in dv_list:
+            raise ValueError(f"data_version should have one of the values: {dv_list}")
         if train:
             self.napi.download_dataset(
-                "v5.0/train.parquet",
+                f"v{dv}/train.parquet",
                 os.path.join(self.datapath, f"train.parquet"),
             )
         if validation:
             self.napi.download_dataset(
-                "v5.0/validation.parquet",
+                f"v{dv}/validation.parquet",
                 os.path.join(self.datapath, f"validation.parquet"),
             )
         if live:
             self.napi.download_dataset(
-                "v5.0/live.parquet",
+                f"/v{dv}/live.parquet",
                 os.path.join(self.datapath, f"live.parquet"),
             )
         if validation_example_preds:
             self.napi.download_dataset(
-                "v5.0/validation_example_preds.parquet",
+                f"/v{dv}/validation_example_preds.parquet",
                 os.path.join(self.datapath, "validation_example_preds.parquet"),
             )
         if live_example_preds:
             self.napi.download_dataset(
-                "v5.0/live_example_preds.parquet",
+                f"/v{dv}/live_example_preds.parquet",
                 os.path.join(self.datapath, "live_example_preds.parquet"),
             )
         if features:
             self.napi.download_dataset(
-                "v5.0/features.json", os.path.join(self.datapath, "features.json")
+                f"/v{dv}/features.json", os.path.join(self.datapath, "features.json")
             )
         # if meta_model:
         #     self.napi.download_dataset(
-        #         "v5.0/meta_model.parquet",
+        #         f"/v{dv}/meta_model.parquet",
         #         os.path.join(self.datapath, "meta_model.parquet"),
         #     )
         if live_benchmark_models:
             self.napi.download_dataset(
-                "v5.0/live_benchmark_models.parquet", "live_benchmark_models.parquet"
+                f"/v{dv}/live_benchmark_models.parquet", "live_benchmark_models.parquet"
             )
         if validation_benchmark_models:
             self.napi.download_dataset(
-                "v5.0/validation_benchmark_models.parquet",
+                f"/v{dv}/validation_benchmark_models.parquet",
                 "validation_benchmark_models.parquet",
             )
         if train_benchmark_models:
             self.napi.download_dataset(
-                "v5.0/train_benchmark_models.parquet", "train_benchmark_models.parquet"
+                f"/v{dv}/train_benchmark_models.parquet",
+                "train_benchmark_models.parquet",
             )
 
     def get_data(self, train=False, validation=False, live=False, merge=False):
