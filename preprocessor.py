@@ -65,40 +65,40 @@ class Preprocessor:
             )
         if live:
             self.napi.download_dataset(
-                f"/v{dv}/live.parquet",
+                f"v{dv}/live.parquet",
                 os.path.join(self.datapath, f"live.parquet"),
             )
         if validation_example_preds:
             self.napi.download_dataset(
-                f"/v{dv}/validation_example_preds.parquet",
+                f"v{dv}/validation_example_preds.parquet",
                 os.path.join(self.datapath, "validation_example_preds.parquet"),
             )
         if live_example_preds:
             self.napi.download_dataset(
-                f"/v{dv}/live_example_preds.parquet",
+                f"v{dv}/live_example_preds.parquet",
                 os.path.join(self.datapath, "live_example_preds.parquet"),
             )
         if features:
             self.napi.download_dataset(
-                f"/v{dv}/features.json", os.path.join(self.datapath, "features.json")
+                f"v{dv}/features.json", os.path.join(self.datapath, "features.json")
             )
         # if meta_model:
         #     self.napi.download_dataset(
-        #         f"/v{dv}/meta_model.parquet",
+        #         f"v{dv}/meta_model.parquet",
         #         os.path.join(self.datapath, "meta_model.parquet"),
         #     )
         if live_benchmark_models:
             self.napi.download_dataset(
-                f"/v{dv}/live_benchmark_models.parquet", "live_benchmark_models.parquet"
+                f"v{dv}/live_benchmark_models.parquet", "live_benchmark_models.parquet"
             )
         if validation_benchmark_models:
             self.napi.download_dataset(
-                f"/v{dv}/validation_benchmark_models.parquet",
+                f"v{dv}/validation_benchmark_models.parquet",
                 "validation_benchmark_models.parquet",
             )
         if train_benchmark_models:
             self.napi.download_dataset(
-                f"/v{dv}/train_benchmark_models.parquet",
+                f"v{dv}/train_benchmark_models.parquet",
                 "train_benchmark_models.parquet",
             )
 
