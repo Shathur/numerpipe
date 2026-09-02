@@ -23,7 +23,9 @@ def neutralize_short(df, prediction_name=None, by=None, proportion=1.0):
         (exposures, np.array([np.mean(scores)] * len(exposures)).reshape(-1, 1))
     )
 
-    scores -= proportion * (exposures @ (np.linalg.pinv(exposures) @ scores.values))
+    scores = scores - proportion * (
+        exposures @ (np.linalg.pinv(exposures) @ scores.values)
+    )
     return scores / scores.std()
 
 
@@ -51,11 +53,11 @@ def neutralize(
         else:
             exposures = df_era[extra_neutralizers].values
 
-        scores -= proportion * exposures.dot(
+        scores = scores - proportion * exposures.dot(
             np.linalg.pinv(exposures.astype(np.float32)).dot(scores.astype(np.float32))
         )
 
-        scores /= scores.std(ddof=0)
+        scores = scores / scores.std(ddof=0)
 
         computed.append(scores)
 
@@ -174,9 +176,9 @@ def reduce_all_exposures(
         if era not in cache and era != "eraX":
             cache[era] = weights
             joblib.dump(cache, lm_cache_file)
-        scores /= tf.math.reduce_std(scores)
-        scores -= tf.reduce_min(scores)
-        scores /= tf.reduce_max(scores)
+        scores = scores / tf.math.reduce_std(scores)
+        scores = scores - tf.reduce_min(scores)
+        scores = scores / tf.reduce_max(scores)
         neutralized.append(scores.numpy())
 
     predictions = pd.DataFrame(
