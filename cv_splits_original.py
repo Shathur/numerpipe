@@ -318,38 +318,16 @@ def cross_validate_train(
         era_idx_train = [
             train_data[train_data["era"] == x].index for x in era_lst_train
         ]
-        target_series = train_data[target_name]
-        # before fillna make sure to fill with float32
-        if str(target_series.dtype) == "float64":
-            target_series = target_series.fillna(2).astype("float32")
-        elif target_series.hasnans:
-            target_series = target_series.fillna(2).astype(
-                target_series.dtype, copy=False
-            )
-        train_data[target_name] = target_series
+        train_data.loc[:, target_name] = train_data.loc[:, target_name].fillna(2)
 
         era_idx_val = [val_data[val_data["era"] == x].index for x in era_lst_validation]
-        target_series_val = val_data[target_name]
-        if str(target_series_val.dtype) == "float64":
-            target_series_val = target_series_val.fillna(2).astype("float32")
-        elif target_series_val.hasnans:
-            target_series_val = target_series_val.fillna(2).astype(
-                target_series_val.dtype, copy=False
-            )
-        val_data[target_name] = target_series_val
+        val_data.loc[:, target_name] = val_data.loc[:, target_name].fillna(2)
 
         if (tour_df is not None) and (not tour_df.empty):
             era_lst_tour = tour_df["era"].unique()
             era_idx_tour = [tour_df[tour_df["era"] == x].index for x in era_lst_tour]
             # here is also the spot to check the target for Nan and fill them with 0.5
-            target_series_tour = tour_df[target_name]
-            if str(target_series_tour.dtype) == "float64":
-                target_series_tour = target_series_tour.fillna(0.5).astype("float32")
-            elif target_series_tour.hasnans:
-                target_series_tour = target_series_tour.fillna(0.5).astype(
-                    target_series_tour.dtype, copy=False
-                )
-            tour_df[target_name] = target_series_tour
+            tour_df.loc[:, target_name] = tour_df.loc[:, target_name].fillna(0.5)
 
         print(
             "********************************************************************************************"
@@ -368,11 +346,8 @@ def cross_validate_train(
             "********************************************************************************************"
         )
 
-        # the sklearn api of xgboost takes our data and make them float, the default is float64
-        # we avoid that by converting our int8 data to float32
-        # then the xgboost makes the internal QuantileDMatrix and drops the float32 copy
-        train_tuple = [X_train.to_numpy(dtype=np.float32), y_train]
-        val_tuple = [X_val.to_numpy(dtype=np.float32), y_val]
+        train_tuple = [X_train, y_train]
+        val_tuple = [X_val, y_val]
         model = models.run_model(
             train_data=train_tuple,
             val_data=val_tuple,
