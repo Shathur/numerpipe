@@ -189,7 +189,7 @@ class Preprocessor:
         worst_n = sorted_diffs.head(num_of_features).index.tolist()
         return sorted_diffs, worst_n
 
-    def get_cv(self, n_splits=None):
+    def get_cv(self, n_splits=None, embg_grp_num=12):
         """
         gets cv_split_data object. Defaut behaviour is passing the n_splits
         in the class Constructor. We may override it here if we want
@@ -201,7 +201,7 @@ class Preprocessor:
             col="era",
             cv_scheme=TimeSeriesSplitGroupsPurged,
             n_splits=n_splits,
-            extra_constructor_params={"embg_grp_num": 12},
+            extra_constructor_params={"embg_grp_num": embg_grp_num},
         )
 
     def get_test_data(self, num_tour_eras):
