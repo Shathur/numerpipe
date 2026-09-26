@@ -94,6 +94,7 @@ def get_predictions_per_era(
     model_type="xgb",
     rank_average=False,
     verbose=True,
+    model_files=None,
 ):
     """
 
@@ -106,11 +107,15 @@ def get_predictions_per_era(
     :param model_type: xgb or lgb
     :param rank_average: True - rank the predictions per era or False - total ranks in the whole dataframe
     :param verbose: True - print models list
+    :param model_files: optional explicit list of model file names inside folder_name
+                        to ensemble, overrides the folder listing (aligned with num_models)
     :return: final predictions with proper dimensions for further use
     """
     model_lst = get_model_lst(
         num_models=num_models, prefix=prefix, folder_name=folder_name, verbose=verbose
     )
+    if model_files is not None:
+        model_lst = [os.path.join(folder_name, f) for f in model_files]
     predictions_total = []
 
     X_test = df

@@ -60,27 +60,58 @@ class PostProcessor:
         public_id, secret_key = self.get_keys()
         return numerapi.NumerAPI(public_id=public_id, secret_key=secret_key)
 
-    def get_predictions_per_era(self, df, model_path, model_type):
-        """Return predictions per era for our df"""
+    def get_predictions_per_era(
+        self, df, model_path, model_type, feature_cols=None, model_files=None
+    ):
+        """
+        Return predictions per era for our df
+        feature_cols: feature list to predict with, defaults to the
+            preprocessor's feature_cols - pass the set the model trained on
+        model_files: optional explicit list of model file names inside
+            model_path to ensemble, defaults to every file in the folder
+        """
+        if feature_cols is None:
+            feature_cols = self.preprocessor.feature_cols
+        num_models = (
+            len(os.listdir(model_path)) if model_files is None else len(model_files)
+        )
         return get_predictions_per_era(
-            df=df[self.preprocessor.feature_cols],
-            num_models=len(os.listdir(model_path)),
+            df=df[feature_cols],
+            num_models=num_models,
             prefix=self.prefix,
             folder_name=model_path,
             era_idx=get_era_idx(df),
             model_type=model_type,
             rank_average=False,
             verbose=False,
+            model_files=model_files,
         )
 
     def add_predictions_per_era(
-        self, df: pd.DataFrame(), model_name: str, model_type: str
+        self,
+        df: pd.DataFrame(),
+        model_name: str,
+        model_type: str,
+        feature_cols=None,
+        model_files=None,
+        column_name=None,
     ):
-        """predict and add prediction to dataframe"""
+        """
+        predict and add prediction to dataframe
+        column_name: predictions_gathered_df column, defaults to model_name -
+            needed when one folder holds several models predicted separately
+            (e.g. one per target/feature set)
+        """
         predictions = self.get_predictions_per_era(
-            df, os.path.join(self.models_path, model_name), model_type
+            df,
+            os.path.join(self.models_path, model_name),
+            model_type,
+            feature_cols=feature_cols,
+            model_files=model_files,
         )
-        self.predictions_gathered_df[model_name] = predictions
+        self.predictions_gathered_df[
+            model_name if column_name is None else column_name
+        ] = predictions
 
     def get_id_column(self, df):
         """return index id as a column"""
