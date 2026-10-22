@@ -32,17 +32,39 @@ class Preprocessor:
         live=False,
         live_example_preds=False,
         validation_example_preds=False,
+        live_example_preds_csv=False,
+        validation_example_preds_csv=False,
         features=False,
         # meta_model=False,
         train_benchmark_models=False,
         validation_benchmark_models=False,
         live_benchmark_models=False,
+        train_neutralizer=False,
+        validation_neutralizer=False,
+        live_neutralizer=False,
     ):
         """
-        Updated for 5.0 data. For more info for the various downloads here visit
+        Updated for 6.0 data. For more info for the various downloads here visit
         https://numer.ai/data
+        NOTE: v5.0-v5.3 train/validation files are retired on Numerai (live only
+        until 2026-11-06). v6.0 ("unity") changes the schema: the
+        era column is "date" and the row identifier is "numerai_ticker".
+        get_data() normalizes these back to "era"/"id" for the rest of the pipeline.
+        Targets are the Jupiter family (target aliases target_jupiter_60);
+        the v5 target_ender_60 etc no longer exist.
         """
-        dv_list = ["atlas", "5.0", "faith", "5.1", "faith2", "5.2", "quantum", "5.3"]
+        dv_list = [
+            "atlas",
+            "5.0",
+            "faith",
+            "5.1",
+            "faith2",
+            "5.2",
+            "quantum",
+            "5.3",
+            "unity",
+            "6.0",
+        ]
         if data_version == "atlas" or data_version == "5.0":
             dv = "5.0"
         elif data_version == "faith" or data_version == "5.1":
@@ -51,8 +73,17 @@ class Preprocessor:
             dv = "5.2"
         elif data_version == "quantum" or data_version == "5.3":
             dv = "5.3"
+        elif data_version == "unity" or data_version == "6.0":
+            dv = "6.0"
         if data_version not in dv_list:
             raise ValueError(f"data_version should have one of the values: {dv_list}")
+        needs_neutralizer = any(
+            [train_neutralizer, validation_neutralizer, live_neutralizer]
+        )
+        if needs_neutralizer and dv != "6.0":
+            raise ValueError(
+                "neutralizer files only exist for data_version 6.0 (unity) and later"
+            )
         if train:
             self.napi.download_dataset(
                 f"v{dv}/train.parquet",
@@ -73,10 +104,20 @@ class Preprocessor:
                 f"v{dv}/validation_example_preds.parquet",
                 os.path.join(self.datapath, "validation_example_preds.parquet"),
             )
+        if validation_example_preds_csv:
+            self.napi.download_dataset(
+                f"v{dv}/validation_example_preds.csv",
+                os.path.join(self.datapath, "validation_example_preds.csv"),
+            )
         if live_example_preds:
             self.napi.download_dataset(
                 f"v{dv}/live_example_preds.parquet",
                 os.path.join(self.datapath, "live_example_preds.parquet"),
+            )
+        if live_example_preds_csv:
+            self.napi.download_dataset(
+                f"v{dv}/live_example_preds.csv",
+                os.path.join(self.datapath, "live_example_preds.csv"),
             )
         if features:
             self.napi.download_dataset(
@@ -89,57 +130,90 @@ class Preprocessor:
         #     )
         if live_benchmark_models:
             self.napi.download_dataset(
-                f"v{dv}/live_benchmark_models.parquet", "live_benchmark_models.parquet"
+                f"v{dv}/live_benchmark_models.parquet",
+                os.path.join(self.datapath, "live_benchmark_models.parquet"),
             )
         if validation_benchmark_models:
             self.napi.download_dataset(
                 f"v{dv}/validation_benchmark_models.parquet",
-                "validation_benchmark_models.parquet",
+                os.path.join(self.datapath, "validation_benchmark_models.parquet"),
             )
         if train_benchmark_models:
             self.napi.download_dataset(
                 f"v{dv}/train_benchmark_models.parquet",
-                "train_benchmark_models.parquet",
+                os.path.join(self.datapath, "train_benchmark_models.parquet"),
             )
+        if train_neutralizer:
+            self.napi.download_dataset(
+                f"v{dv}/train_neutralizer.parquet",
+                os.path.join(self.datapath, "train_neutralizer.parquet"),
+            )
+        if validation_neutralizer:
+            self.napi.download_dataset(
+                f"v{dv}/validation_neutralizer.parquet",
+                os.path.join(self.datapath, "validation_neutralizer.parquet"),
+            )
+        if live_neutralizer:
+            self.napi.download_dataset(
+                f"v{dv}/live_neutralizer.parquet",
+                os.path.join(self.datapath, "live_neutralizer.parquet"),
+            )
+
+    @staticmethod
+    def _normalize_unity_columns(df):
+        """
+        v6.0 (unity) schema uses "date" for the era column and
+        "numerai_ticker" as the row identifier. The rest of numerpipe
+        (cv_splits, utils, PostProcessor, models_code scripts) expects
+        "era"/"id", so rename them back here.
+        """
+        if df is None:
+            return df
+        rename_map = {}
+        if "date" in df.columns and "era" not in df.columns:
+            rename_map["date"] = "era"
+        if "numerai_ticker" in df.columns and "id" not in df.columns:
+            rename_map["numerai_ticker"] = "id"
+        if rename_map:
+            df = df.rename(columns=rename_map)
+        return df
 
     def get_data(self, train=False, validation=False, live=False, merge=False):
         if (os.path.exists(os.path.join(self.datapath, f"train.parquet"))) and train:
             self.train_df = pd.read_parquet(
                 os.path.join(self.datapath, f"train.parquet")
             )
+            self.train_df = self._normalize_unity_columns(self.train_df)
         if (
             os.path.exists(os.path.join(self.datapath, f"validation.parquet"))
         ) and validation:
             self.validation_df = pd.read_parquet(
                 os.path.join(self.datapath, f"validation.parquet")
             )
+            self.validation_df = self._normalize_unity_columns(self.validation_df)
         if (os.path.exists(os.path.join(self.datapath, f"live.parquet"))) and live:
             self.live_df = pd.read_parquet(os.path.join(self.datapath, f"live.parquet"))
+            self.live_df = self._normalize_unity_columns(self.live_df)
         if merge:
             self.train_df = pd.concat([self.train_df, self.validation_df])
 
-    def get_features(self, feature_group):
+    def get_features(self, feature_group, include_country=False):
         """
         features_json contains:
-            feature_stats : every single feature with the following stats
-                legacy_uniqueness
-                spearman_corr_w_target_nomi_20_mean
-                spearman_corr_w_target_nomi_20_sharpe
-                spearman_corr_w_target_nomi_20_reversals
-                spearman_corr_w_target_nomi_20_autocorr
-                spearman_corr_w_target_nomi_20_arl
             feature_sets
-                small
-                medium
-                all
-                v2_equivalent_features
-                v3_equivalent_features
-                fncv3_features
-                intelligence, charisma, stregth, dexterity, constitution, wisdom, agility, serenity
-                sunshine
-                rain
+                small (101), medium (351), all (1040), signals (23)
             targets
-                now scoring on target_cyrus_v4_20
+                the v6 Jupiter family; 'target' is an alias of target_jupiter_60
+        NOTE for v6.0 (unity):
+            - sets like v2_equivalent_features, fncv3_features, sunshine, rain
+              and the per-attribute sets no longer exist
+            - feature_stats is no longer published
+            - every set includes "feature_country" which is TEXT (country
+              codes); excluded by default since numeric models (xgb/lgb)
+              would break on it - pass include_country=True to keep it
+            - the 1017 new v6 features use bins 0-4 (NaN -> 2); the 22
+              restored signals numeric features keep their values and can
+              hold NaNs
         """
         possible_feature_list = [
             "small",
@@ -158,6 +232,7 @@ class Preprocessor:
             "serenity",
             "sunshine",
             "rain",
+            "signals",
         ]
         assert os.path.exists(
             f"{self.datapath}/features.json"
@@ -169,6 +244,13 @@ class Preprocessor:
         f = open(f"{self.datapath}/features.json")
         features_json = json.load(f)
         self.feature_cols = features_json["feature_sets"][feature_group]
+
+        # v6.0: feature_country is a text (country code) column - numeric
+        # models (xgb/lgb) break on it, so drop it unless explicitly kept
+        if not include_country and "feature_country" in self.feature_cols:
+            self.feature_cols = [
+                c for c in self.feature_cols if c != "feature_country"
+            ]
 
     def per_era_correlations(self, df, features, era_col, target_col):
         """Get the correlation of each era with the designated target"""
