@@ -7,7 +7,6 @@ scikit-learn
 scipy
 xgboost
 lightgbm
-tensorflow
 torch
 joblib
 tqdm

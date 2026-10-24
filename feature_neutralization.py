@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import scipy.stats
-import tensorflow as tf
+import torch
 import joblib
 from tqdm.notebook import tqdm
 
@@ -85,55 +85,104 @@ def neutralize_series(series, by, proportion=1.0):
 # original code written by JRB at JTaylor's github
 # https://github.com/jonrtaylor/twitch/blob/master/FE_Clipping_Script.ipynb
 # here we gather the functions and with minor changes implement them into our pipeline
-@tf.function(experimental_relax_shapes=True, experimental_compile=True)
+# NOTE: ported from TensorFlow to PyTorch (the previous TF version is kept in
+# feature_neutralization_prev6.py). The linear model is a zero-initialized
+# `nn.Linear(bias=False)` (i.e. `y = X @ w`, identical to
+# tf.keras.experimental.LinearModel(use_bias=False)) and `Adamax` below is a
+# faithful re-implementation of the keras.optimizers.Adamax update rule
+# (m = b1*m + (1-b1)*g; u = max(b2*u, |g|); w -= lr/(1-b1**t) * m/(u+eps)
+# with keras defaults lr=0.001, b1=0.9, b2=0.999, eps=1e-7), so the trimming
+# results match those of the previous TF implementation.
 def exposures(x, y):
-    x = x - tf.math.reduce_mean(x, axis=0)
-    x = x / tf.norm(x, axis=0)
-    y = y - tf.math.reduce_mean(y, axis=0)
-    y = y / tf.norm(y, axis=0)
-    return tf.matmul(x, y, transpose_a=True)
+    x = x - torch.mean(x, dim=0, keepdim=True)
+    x = x / torch.norm(x, dim=0)
+    y = y - torch.mean(y, dim=0, keepdim=True)
+    y = y / torch.norm(y, dim=0)
+    return torch.matmul(x.transpose(0, 1), y)
 
 
-@tf.function(experimental_relax_shapes=True)
+class Adamax:
+    """Faithful re-implementation of keras.optimizers.Adamax (dense variant).
+
+    torch.optim.Adamax is NOT used because it applies epsilon inside the
+    infinity-norm max (u = max(b2*u, |g| + eps)), which yields a different
+    trajectory from keras. This class mirrors keras exactly.
+    """
+
+    def __init__(self, model, lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-7):
+        self.var = model.weight
+        self.m = torch.zeros_like(self.var)
+        self.u = torch.zeros_like(self.var)
+        self.t = 0
+        self.lr = lr
+        self.beta_1 = beta_1
+        self.beta_2 = beta_2
+        self.epsilon = epsilon
+
+    def apply_gradients(self, grad):
+        self.t += 1
+        m = self.beta_1 * self.m + (1 - self.beta_1) * grad
+        u = torch.maximum(self.beta_2 * self.u, grad.abs())
+        beta_1_power = np.power(np.float32(self.beta_1), np.float32(self.t))
+        update = (self.lr * m) / ((1 - beta_1_power) * (u + self.epsilon))
+        with torch.no_grad():
+            self.var -= update
+        self.m, self.u = m, u
+
+
 def train_loop_body(model, feats, pred, target_exps):
-    with tf.GradientTape() as tape:
-        exps = exposures(feats, pred[:, None] - model(feats, training=True))
-        loss = tf.reduce_sum(
-            tf.nn.relu(tf.nn.relu(exps) - tf.nn.relu(target_exps))
-            + tf.nn.relu(tf.nn.relu(-exps) - tf.nn.relu(-target_exps))
-        )
-    return loss, tape.gradient(loss, model.trainable_variables)
+    exps = exposures(feats, pred[:, None] - model(feats))
+    loss = torch.sum(
+        torch.relu(torch.relu(exps) - torch.relu(target_exps))
+        + torch.relu(torch.relu(-exps) - torch.relu(-target_exps))
+    )
+    return loss
 
 
-def train_loop(model, optimizer, feats, pred, target_exps, era):
-    for i in range(100000):
-        loss, grads = train_loop_body(model, feats, pred, target_exps)
-        optimizer.apply_gradients(zip(grads, model.trainable_variables))
+def train_loop(model, optimizer, feats, pred, target_exps, era, max_iters=100000, losses=None):
+    # optionally record the loss trajectory (one float per iteration, pre-update)
+    for i in range(max_iters):
+        loss = train_loop_body(model, feats, pred, target_exps)
+        model.zero_grad(set_to_none=False)
+        loss.backward()
+        optimizer.apply_gradients(model.weight.grad)
+        loss = loss.item()
+        if losses is not None:
+            losses.append(loss)
         if loss < 1e-7:
             print(f"broke at era: {int(era)} with loss: {loss:0.7f} at iteration: {i}")
             break
         if i % 10000 == 0:
-            # tqdm.write(f'era: {era[3:]} loss: {loss:0.7f}', end='\r')
             tqdm.write(f"era: {int(era)} loss: {loss:0.7f}", end="\r")
 
 
-def reduce_exposure(prediction, features, max_exp, era, weights=None):
-    model = tf.keras.models.Sequential(
-        [
-            tf.keras.layers.Input(features.shape[1]),  # 310
-            tf.keras.experimental.LinearModel(use_bias=False),
-        ]
-    )
-    feats = tf.convert_to_tensor(features - 0.5, dtype=tf.float32)
-    pred = tf.convert_to_tensor(prediction, dtype=tf.float32)
+def get_weights(model):
+    # (n_features, 1) kernel like a keras Dense kernel, so joblib lm caches
+    # written by the previous TF implementation stay loadable
+    return [model.weight.detach().numpy().T]
+
+
+def set_weights(model, weights):
+    with torch.no_grad():
+        model.weight.copy_(
+            torch.as_tensor(np.asarray(weights[0].T), dtype=torch.float32)
+        )
+
+
+def reduce_exposure(prediction, features, max_exp, era, weights=None, max_iters=100000, losses=None):
+    model = torch.nn.Linear(features.shape[1], 1, bias=False)
+    # kernel_initializer='zeros' like tf.keras.experimental.LinearModel
+    torch.nn.init.zeros_(model.weight)
+    feats = torch.as_tensor(features - 0.5, dtype=torch.float32)
+    pred = torch.as_tensor(prediction, dtype=torch.float32)
     if weights is None:
-        optimizer = tf.keras.optimizers.Adamax()
+        optimizer = Adamax(model)
         start_exp = exposures(feats, pred[:, None])
-        target_exps = tf.clip_by_value(start_exp, -max_exp, max_exp)
-        train_loop(model, optimizer, feats, pred, target_exps, era)
+        target_exps = torch.clamp(start_exp, -max_exp, max_exp)
+        train_loop(model, optimizer, feats, pred, target_exps, era, max_iters=max_iters, losses=losses)
     else:
-        model.set_weights(weights)
-    return pred[:, None] - model(feats), model.get_weights()
+        set_weights(model, weights)
+    return pred[:, None] - model(feats), get_weights(model)
 
 
 def reduce_all_exposures(
@@ -145,10 +194,14 @@ def reduce_all_exposures(
     gaussianize=True,
     era_col="era",
     max_exp=0.1,
+    max_iters=100000,
+    loss_history=None,
 ):  ###<-----SELECT YOUR MAXIMUM FEATURE EXPOSURE HERE###
     if neutralizers is None:
         neutralizers = [x for x in df.columns if x.startswith("feature")]
     neutralized = []
+    if loss_history is None:
+        loss_history = {}
     if lm_cache_file.is_file():
         cache = joblib.load(lm_cache_file)
         # Remove weights for eraX if we'd accidentally saved it in the past.
@@ -156,7 +209,7 @@ def reduce_all_exposures(
     else:
         cache = {}
     for era in tqdm(df[era_col].unique()):
-        tqdm.write(era, end="\r")
+        tqdm.write(str(era), end="\r")
         df_era = df[df[era_col] == era]
         scores = df_era[column].values
         exposure_values = df_era[neutralizers].values
@@ -170,15 +223,18 @@ def reduce_all_exposures(
                 scores2.append(x)
             scores = np.array(scores2)[0]
 
+        era_losses = loss_history.setdefault(era, [])
         scores, weights = reduce_exposure(
-            scores, exposure_values, max_exp, era, cache.get(era)
+            scores, exposure_values, max_exp, era, cache.get(era),
+            max_iters=max_iters, losses=era_losses,
         )
         if era not in cache and era != "eraX":
             cache[era] = weights
             joblib.dump(cache, lm_cache_file)
-        scores = scores / tf.math.reduce_std(scores)
-        scores = scores - tf.reduce_min(scores)
-        scores = scores / tf.reduce_max(scores)
+        scores = scores.detach()
+        scores = scores / torch.std(scores, correction=0)
+        scores = scores - torch.min(scores)
+        scores = scores / torch.max(scores)
         neutralized.append(scores.numpy())
 
     predictions = pd.DataFrame(

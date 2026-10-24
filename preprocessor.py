@@ -19,6 +19,9 @@ class Preprocessor:
         self.train_df = pd.DataFrame()
         self.validation_df = (pd.DataFrame(),)
         self.test_df = pd.DataFrame()
+        self.train_neutralizer_df = pd.DataFrame()
+        self.validation_neutralizer_df = pd.DataFrame()
+        self.live_neutralizer_df = pd.DataFrame()
         self.feature_cols = []
         self.target = target
         self.n_splits = n_splits
@@ -178,7 +181,16 @@ class Preprocessor:
             df = df.rename(columns=rename_map)
         return df
 
-    def get_data(self, train=False, validation=False, live=False, merge=False):
+    def get_data(
+        self,
+        train=False,
+        validation=False,
+        live=False,
+        merge=False,
+        train_neutralizer=False,
+        validation_neutralizer=False,
+        live_neutralizer=False,
+    ):
         if (os.path.exists(os.path.join(self.datapath, f"train.parquet"))) and train:
             self.train_df = pd.read_parquet(
                 os.path.join(self.datapath, f"train.parquet")
@@ -196,6 +208,35 @@ class Preprocessor:
             self.live_df = self._normalize_unity_columns(self.live_df)
         if merge:
             self.train_df = pd.concat([self.train_df, self.validation_df])
+        if (
+            os.path.exists(os.path.join(self.datapath, "train_neutralizer.parquet"))
+        ) and train_neutralizer:
+            self.train_neutralizer_df = pd.read_parquet(
+                os.path.join(self.datapath, "train_neutralizer.parquet")
+            )
+            self.train_neutralizer_df = self._normalize_unity_columns(
+                self.train_neutralizer_df
+            )
+        if (
+            os.path.exists(
+                os.path.join(self.datapath, "validation_neutralizer.parquet")
+            )
+        ) and validation_neutralizer:
+            self.validation_neutralizer_df = pd.read_parquet(
+                os.path.join(self.datapath, "validation_neutralizer.parquet")
+            )
+            self.validation_neutralizer_df = self._normalize_unity_columns(
+                self.validation_neutralizer_df
+            )
+        if (
+            os.path.exists(os.path.join(self.datapath, "live_neutralizer.parquet"))
+        ) and live_neutralizer:
+            self.live_neutralizer_df = pd.read_parquet(
+                os.path.join(self.datapath, "live_neutralizer.parquet")
+            )
+            self.live_neutralizer_df = self._normalize_unity_columns(
+                self.live_neutralizer_df
+            )
 
     def get_features(self, feature_group, include_country=False):
         """
