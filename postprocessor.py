@@ -148,10 +148,15 @@ class PostProcessor:
         public_key, secret_key = self.get_keys()
         # keep our model names as list to iterate on
         model_names = self.predictions_gathered_df.columns.tolist()
-        # keep id as a column
-        predictions_df = self.get_id_column(df).to_frame()
-        # need to also reset the index
-        predictions_df = predictions_df.reset_index(drop=True)
+        # v6.0 ("unity") diagnostics/submissions are keyed by
+        # (numerai_ticker, date) - same format as Signals v3.1
+        if "numerai_ticker" in df.columns and "date" in df.columns:
+            predictions_df = df[["numerai_ticker", "date"]].reset_index(drop=True)
+        else:
+            # legacy behaviour: keep id as a column
+            predictions_df = self.get_id_column(df).to_frame()
+            # need to also reset the index
+            predictions_df = predictions_df.reset_index(drop=True)
         if submit_type == "prediction":
             for name in tqdm(model_names):
                 predictions_df["prediction"] = self.predictions_gathered_df[name]
