@@ -1,5 +1,8 @@
 import sys
 import os
+import numpy as np
+import pyarrow.dataset as ds
+import pyarrow.parquet as pq
 import numerapi
 import pandas as pd
 import json
@@ -342,30 +345,130 @@ class Preprocessor:
             "new_test.parquet",
             "new_validation.parquet",
         ],
+        drop_nan_target_eras=True,
     ):
         """
         loads the dataframe of the provided filename and then splits it into train and
         test data.
         erasplit : [train_start, train_end, test_start, test_end, validation_start, validation_end]
         save_filenames : [train_path, test_path, validation_path]
+        drop_nan_target_eras : eras where the designated target (self.target) has
+            NaN values (tail eras whose target horizon is not yet filled) are
+            removed from the TRAIN split before saving, so new_train_df can
+            never contain eras with a non-existent target. Test and
+            validation splits are left untouched - NaN targets there are
+            acceptable. The split indices themselves are still resolved on
+            the full era list, so the erasplit boundaries keep their
+            meaning (only trailing/uncovered eras get dropped, which is
+            exactly the NaN-target tail).
+
+        Memory blueprint: the full dataframe is never loaded. Only the
+        "era" + target columns are read to detect the NaN-target eras, and
+        every output file is written by streaming the parquet through a
+        pyarrow dataset filter, so only the matching rows of one split are
+        ever resident in memory (no boolean-mask copies of the whole frame).
         """
-        new_train_df = pd.read_parquet(os.path.join(self.datapath, filename))
-        unique_eras = new_train_df["era"].unique().tolist()
+        src_path = os.path.join(self.datapath, filename)
+
+        # resolve target column(s); self.target may be a string or a list
+        targets = (
+            [t for t in self.target if t is not None]
+            if isinstance(self.target, list)
+            else [self.target]
+            if self.target is not None
+            else []
+        )
+
+        schema_names = pq.ParquetFile(src_path).schema_arrow.names
+        target_cols = [t for t in targets if t in schema_names]
+        for t in targets:
+            if t not in schema_names:
+                print(
+                    f"save_custom_era_split: WARNING target column '{t}' not "
+                    f"found in {filename}, skipping NaN check for it"
+                )
+
+        # ------------------------------------------------------------------
+        # 1. read ONLY the era column to resolve the split era lists
+        # ------------------------------------------------------------------
+        era_tbl = pq.read_table(src_path, columns=["era"])
+        unique_eras = pd.unique(era_tbl.column("era").to_pandas()).tolist()
+        del era_tbl
+        gc.collect()
+
         train_eras = unique_eras[erasplit[0] : erasplit[1]]
         test_eras = unique_eras[erasplit[2] : erasplit[3]]
         validation_eras = unique_eras[erasplit[4] : erasplit[5]]
-        new_train_df[new_train_df["era"].isin(train_eras)].to_parquet(
-            os.path.join(self.datapath, save_filenames[0]),
-            engine="pyarrow",
-        )
-        new_train_df[new_train_df["era"].isin(test_eras)].to_parquet(
-            os.path.join(self.datapath, save_filenames[1]),
-            engine="pyarrow",
-        )
-        new_train_df[new_train_df["era"].isin(validation_eras)].to_parquet(
-            os.path.join(self.datapath, save_filenames[2]),
-            engine="pyarrow",
-        )
+        split_eras = [train_eras, test_eras, validation_eras]
+
+        # ------------------------------------------------------------------
+        # 2. read ONLY era + target columns, find eras with NaN target
+        # ------------------------------------------------------------------
+        if drop_nan_target_eras and target_cols:
+            tgt_tbl = pq.read_table(src_path, columns=["era"] + target_cols)
+            era_np = tgt_tbl.column("era").to_numpy(zero_copy_only=False)
+            bad_mask = np.zeros(len(tgt_tbl), dtype=bool)
+            for t in target_cols:
+                t_np = tgt_tbl.column(t).to_numpy(zero_copy_only=False)
+                if t_np.dtype != np.float64:
+                    t_np = t_np.astype(np.float64)
+                n_nan = int(np.isnan(t_np).sum())
+                if n_nan:
+                    print(
+                        f"save_custom_era_split: '{t}' has {n_nan} NaN "
+                        f"values in {filename}"
+                    )
+                bad_mask |= np.isnan(t_np)
+                del t_np
+            bad_eras = set(pd.unique(era_np[bad_mask]).tolist())
+            del tgt_tbl, era_np, bad_mask
+            gc.collect()
+            if bad_eras:
+                print(
+                    f"save_custom_era_split: dropping {len(bad_eras)} eras "
+                    f"where the designated target has NaN values (train only)"
+                )
+                kept_before = len(train_eras)
+                train_eras[:] = [e for e in train_eras if e not in bad_eras]
+                print(
+                    f"  -> {save_filenames[0]}: kept {len(train_eras)}/"
+                    f"{kept_before} train eras (dropped "
+                    f"{kept_before - len(train_eras)} NaN-target eras)"
+                )
+                print(
+                    "  -> test and validation splits are left untouched; "
+                    "NaN targets there are acceptable"
+                )
+
+        # ------------------------------------------------------------------
+        # 3. never write an empty split (especially the train file)
+        # ------------------------------------------------------------------
+        for name, eras in zip(save_filenames, split_eras):
+            if len(eras) == 0:
+                raise ValueError(
+                    f"save_custom_era_split: split '{name}' would contain no "
+                    f"eras after the NaN-target filter - refusing to write "
+                    f"an empty file. Check erasplit/drop_nan_target_eras."
+                )
+
+        # ------------------------------------------------------------------
+        # 4. write each split with a pyarrow filter (rows streamed, only the
+        #    matching split is ever materialised - full df never loaded)
+        # ------------------------------------------------------------------
+        dataset = ds.dataset(src_path, format="parquet")
+        for name, eras in zip(save_filenames, split_eras):
+            out_path = os.path.join(self.datapath, name)
+            table = dataset.to_table(filter=ds.field("era").isin(eras))
+            pq.write_table(
+                table,
+                out_path,
+            )
+            print(
+                f"save_custom_era_split: wrote {out_path} "
+                f"({len(eras)} eras, {table.num_rows} rows)"
+            )
+            del table
+            gc.collect()
 
     def train(
         self,
