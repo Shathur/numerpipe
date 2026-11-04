@@ -16,9 +16,12 @@ from cv_splits import (
 
 class Preprocessor:
 
-    def __init__(self, datapath, n_splits, target):
+    def __init__(self, datapath, n_splits, target, attach_yf=True):
         self.napi = numerapi.NumerAPI()
         self.datapath = datapath
+        # task 03 (yahoo_unity): attach yf_* features when the optional
+        # data/yf_features_<split>.parquet files exist; no-op otherwise
+        self.attach_yf = attach_yf
         self.train_df = pd.DataFrame()
         self.validation_df = (pd.DataFrame(),)
         self.test_df = pd.DataFrame()
@@ -184,6 +187,38 @@ class Preprocessor:
             df = df.rename(columns=rename_map)
         return df
 
+    def _attach_yf(self, df, split):
+        """
+        Task 03 (yahoo_unity) hook: attach the optional yahoo-derived `yf_*`
+        feature parquet (data/yf_features_<split>.parquet) onto a loaded
+        Unity split. Additive only: without the yf files the pipeline
+        behaves exactly as before (one log line, then a no-op). Real errors
+        during an existing attach are re-raised - a silent feature drop
+        would mislead the trainer, which lists yf columns in feature_cols.
+        """
+        if not self.attach_yf:
+            return df
+        if df is None or not isinstance(df, pd.DataFrame) or df.empty:
+            return df
+        yf_path = os.path.join(self.datapath, f"yf_features_{split}.parquet")
+        if not os.path.exists(yf_path):
+            print(f"preprocessor: yf features absent ({yf_path}) - skipping attach")
+            return df
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if repo_root not in sys.path:
+            sys.path.insert(0, repo_root)
+        from yahoo_unity.merge_utils import attach_yf_features
+
+        n_feat = sum(
+            1 for n in pq.ParquetFile(yf_path).schema_arrow.names
+            if str(n).startswith("yf_")
+        )
+        print(f"preprocessor: attaching yf features from {yf_path}")
+        df = attach_yf_features(df, self.datapath, split=split)
+        print(f"preprocessor: yf attach done for split '{split}' "
+              f"(+{n_feat} yf_* columns, missing -> 2)")
+        return df
+
     def get_data(
         self,
         train=False,
@@ -199,6 +234,7 @@ class Preprocessor:
                 os.path.join(self.datapath, f"train.parquet")
             )
             self.train_df = self._normalize_unity_columns(self.train_df)
+            self.train_df = self._attach_yf(self.train_df, "train")
         if (
             os.path.exists(os.path.join(self.datapath, f"validation.parquet"))
         ) and validation:
@@ -206,9 +242,11 @@ class Preprocessor:
                 os.path.join(self.datapath, f"validation.parquet")
             )
             self.validation_df = self._normalize_unity_columns(self.validation_df)
+            self.validation_df = self._attach_yf(self.validation_df, "validation")
         if (os.path.exists(os.path.join(self.datapath, f"live.parquet"))) and live:
             self.live_df = pd.read_parquet(os.path.join(self.datapath, f"live.parquet"))
             self.live_df = self._normalize_unity_columns(self.live_df)
+            self.live_df = self._attach_yf(self.live_df, "live")
         if merge:
             self.train_df = pd.concat([self.train_df, self.validation_df])
         if (
